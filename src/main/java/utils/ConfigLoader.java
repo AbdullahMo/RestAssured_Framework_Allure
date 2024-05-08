@@ -18,29 +18,13 @@ public class ConfigLoader {
         return configLoader;
     }
 
-    public String getClientId(){
-        String prop = properties.getProperty("client_id");
-        if(prop != null) return prop;
-        else throw new RuntimeException("Couldn't find property specified 'client_id'");
-    }
-    public String getClientSecret(){
-        String prop = properties.getProperty("client_secret");
-        if(prop != null) return prop;
-        else throw new RuntimeException("Couldn't find property specified 'client_secret'");
-    }
-    public String getGrantType(){
-        String prop = properties.getProperty("grant_type");
-        if(prop != null) return prop;
-        else throw new RuntimeException("Couldn't find property specified 'grant_type'");
-    }
-    public String getRefreshToken(){
-        String prop = properties.getProperty("refresh_token");
-        if(prop != null) return prop;
-        else throw new RuntimeException("Couldn't find property specified 'refresh_token'");
-    }
-    public String getUserId(){
-        String prop = properties.getProperty("user_id");
-        if(prop != null) return prop;
-        else throw new RuntimeException("Couldn't find property specified 'user_id'");
+    public String getPropertyValue(String propertyKey){
+        String prop = null;
+        try{
+            prop = properties.getProperty(propertyKey);
+        }catch (Exception e) {
+            LoggerUtil.getLogger().error("Couldn't find property key specified: " + propertyKey + "\n" + e.getMessage());
+        }
+        return prop;
     }
 }

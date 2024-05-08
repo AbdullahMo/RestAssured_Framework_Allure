@@ -31,10 +31,10 @@ public class TokenManager {
     }
     private static Response renewToken(){
         HashMap<String, String> formParams = new HashMap<String,String>();
-        formParams.put("client_id", ConfigLoader.getInstance().getClientId());
-        formParams.put("client_secret", ConfigLoader.getInstance().getClientSecret());
-        formParams.put("grant_type", ConfigLoader.getInstance().getGrantType());
-        formParams.put("refresh_token", ConfigLoader.getInstance().getRefreshToken());
+        formParams.put("client_id", ConfigLoader.getInstance().getPropertyValue("client_id"));
+        formParams.put("client_secret", ConfigLoader.getInstance().getPropertyValue("client_secret"));
+        formParams.put("grant_type", ConfigLoader.getInstance().getPropertyValue("grant_type"));
+        formParams.put("refresh_token", ConfigLoader.getInstance().getPropertyValue("refresh_token"));
 
         Response response = RestResources.postToken(formParams);
 
