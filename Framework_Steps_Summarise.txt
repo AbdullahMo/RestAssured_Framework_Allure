@@ -1,0 +1,264 @@
+RestAssured Revision points
+=============================
+1- given().
+	wheh().post("endpoint")
+	then().extract().response();
+	
+2- We can make a reusable static method to build certain request and return it as Pojo class
+example: 
+
+    public static Playlist playlistBuilder(String playlistName, String playlistDescription, boolean _public){
+//        return new Playlist().
+//                .setName(playlistName)
+//                .setDescription(playlistDescription)
+//                .setPublic(_public);
+        // Using Lombok Builder
+        return Playlist.builder().name(playlistName)
+                .description(playlistDescription)
+                ._public(_public)
+                .build();
+    }
+	
+3- In test class we can call this method and store it as the request with type of POJO class
+example: Playlist playlistRequest = playlistBuilder("New Playlist", "Description", false);
+
+4- Abstract RequestSpecification and Response Specification in a seperate class as static methods to be reusable across framework
+example:
+
+   public static RequestSpecification getRequestSpec(){
+        return new RequestSpecBuilder()
+                .setBaseUri(SPOTIFY_URL)
+                .setBasePath(BASE_PATH)
+                .setContentType(ContentType.JSON)
+                .log(LogDetail.ALL)
+                .addFilter(new AllureRestAssured())
+                .build();
+    }
+
+    public static RequestSpecification getTokenRequestSpec(){
+        return new RequestSpecBuilder()
+                .setBaseUri(SPOTIFY_TOKEN_URL)
+                .setContentType(ContentType.URLENC)
+                .log(LogDetail.ALL)
+                .addFilter(new AllureRestAssured())
+                .build();
+    }
+    public static ResponseSpecification getResponseSpec(){
+        return new ResponseSpecBuilder()
+                .expectContentType(ContentType.JSON)
+                .log(LogDetail.ALL)
+                .build();
+    }
+	
+5- In the above example, notice that URLs are stored as constants in a seperate class to avoid code boiling
+example:
+   public static final String SPOTIFY_URL = "https://api.spotify.com";
+    public static final String SPOTIFY_TOKEN_URL = "https://accounts.spotify.com";
+    public static final String BASE_PATH = "/v1";
+    public static final String API = "/api";
+    public static final String TOKEN = "/token";
+    public static final String USERS = "/users";
+    public static final String PLAYLISTS = "/playlists";
+	
+6- Create a class with that contain the common REST methods that will be used, methods will return as type Response
+example:
+  public static Response post(Object playlistRequest, String path, String access_token){
+        return given(getRequestSpec())
+                .auth().oauth2(access_token)
+                .body(playlistRequest)
+        .when().post(path)
+        .then().spec(getResponseSpec())
+                .extract().response();
+    }
+
+    public static Response postToken(HashMap<String, String> formParams){
+        return given(getTokenRequestSpec())
+                .formParams(formParams)
+        .when().post(API+ TOKEN)
+        .then().spec(getResponseSpec())
+                .extract().response();
+    }
+    public static Response get(String path, String access_token){
+        return given(getRequestSpec())
+                .auth().oauth2(access_token)
+        .when().get(path)
+        .then().spec(getResponseSpec())
+                .extract().response();
+    }
+
+    public static Response put(Object playlistRequest, String path, String access_token){
+        return given(getRequestSpec())
+                .auth().oauth2(access_token)
+                .body(playlistRequest)
+        .when().put(path)
+        .then()
+                .extract().response();
+    }
+
+
+7- We can make use of created methods in above example specific to our application
+example:
+  @Step
+    public static Response post(Playlist playlistRequest){
+        return RestResources.post(playlistRequest, USERS + "/" + ConfigLoader.getInstance().getPropertyValue("user_id") + PLAYLISTS, getToken());
+    }
+    @Step
+    public static Response post(Playlist playlistRequest, String token){
+        return RestResources.post(playlistRequest,  USERS + "/" + ConfigLoader.getInstance().getPropertyValue("user_id") + PLAYLISTS, token);
+    }
+    @Step
+    public static Response get(String playlistId){
+        return RestResources.get(PLAYLISTS + "/" + playlistId, getToken());
+    }
+    @Step
+    public static Response put(Playlist playlistRequest, String playlistId){
+        return RestResources.put(playlistRequest, PLAYLISTS + "/" + playlistId, getToken());
+    }
+
+
+8- We can store the response deserialized So that we can do assertions or even validate response schema with the help of CRUD methods made in previous steps
+example:
+
+= Response response = PlaylistAPI.post(playlistRequest);
+= Playlist playListResponse = response.as(Playlist.class);
+
+9- Now that we have the response we can make assertions on response body, headers or even schema
+using hamcrest matchers to help
+
+example:
+assertEquals(response.statusCode(), equalTo(201)); //Status code
+assertEquals(playListResponse.getName(), equalTo(playlistRequest.getName()));  //Response body 
+
+10- For schema validation we can make a validateSchema function that takes response and schema file path as parameters
+example:
+
+public static boolean validateSchema(Response response, String schemaPath){
+	try{
+		JsonNode schemaReader = JsonLoader.fromFile(new File(schemaPath));
+		JsonSchema jsonSchema = JsonSchemaFatory.byDefault().getJsonSchema(schemaReader);
+	
+		ObjectMapper objectMapper = new ObjectMapper();
+		JsonNose responseJsonNode = objectMapper.readTree(response.getBody().asString());
+
+		ProcessingReport report = jsonSchema.validate(responseJsonNode);
+	
+		if (!report.isSuccess){
+			for(ProcessingMessage message : report){
+				LoggerUtil.getLogger().error("Schema validation error: {}", message.getMessage());
+			}
+		}
+		return report.isSuccess();
+		}catch(Exception e){
+			LoggerUtil.getLogger().error("Failed to parse json schema or not found", e.getMessage());
+			return false;
+		}
+}
+
+* we load the schema file into a JsonNode and named it schemaReader
+* using the JsonNode retrieved we store it in a JsonSchema variable using JsonSchemaFatory.byDefault().getJsonSchema(schemaReader);
+* we use Object mapper to readTree the response as string and save it as another JsonNode 
+* now we are ready to pass the responseJsonNode to the jsonChema variable created using jsonSchema.validate(responseJsonNode);
+* Save report of schema validation using ProcessingReport report = jsonSchema.validate(responseJsonNode);
+* We can log why it failed by looping over the report using ProcessingMessage message
+like=> 
+if(!report.isSuccess()){
+		for(ProcessingMessage message : report){
+			LoggerUtil.getLogger().error("Schema validation error: {}", message.getMessage());
+		}
+}
+
+* finally return report.isSuccess(); else return false in catch block
+
+
+========================================================================================================
+Utilities:
+============
+1- Property file loader 
+public static Properties propertyLoader(String filePath){
+	Properties properties = new Properties();
+	BufferedReader bufferedReader;
+	
+	bufferedReader = new BufferedReader(new FileReader(filePath));
+	
+	properties.load(bufferedReader);
+	bufferedReader.close();
+
+}
+
+2- Make a configLoader singelton class
+private final Properties properties;
+private static ConfigLoader configLoader;
+
+private ConfigLoader(){
+	properties = PropertyUtils.propertyLoader(propertiesFilePath);
+}
+
+ public static ConfigLoader getInstance(){
+        if(configLoader == null){
+            configLoader = new ConfigLoader();
+        }
+        return configLoader;
+    }
+
+    public String getPropertyValue(String propertyKey){
+        String prop = null;
+        try{
+            prop = properties.getProperty(propertyKey);
+        }catch (Exception e) {
+            LoggerUtil.getLogger().error("Couldn't find property key specified: " + propertyKey + "\n" + e.getMessage());
+        }
+        return prop;
+    }
+	
+3- Logger util class
+private static final Logger logger = LogManager.getLogger(LoggerUtil.class);
+
+private LoggerUtil(){
+}
+
+public Logger getLogger(){
+ return LoggerUtil.logger;
+|
+
+We can even get rid of the getter using @Getter from Lombok
+
+===========================================================================
+Token Management:|
+==================
+private static String access_token;
+private static Instant expiry_time;
+
+public synchronized static String getToken(){
+	try{
+		if(access_token == null || Instant.now().isAfter(expiry_time)){
+			Response response = renewToken();
+			access_token = response.path("access_token");
+			int expiryInSeconds = response.path("expires_in");
+			expiry_time = Instant.now().plusSeconds(expiryInSeconds - 300);
+		} else {
+			log.("Token is still valid");
+		}
+	}catch(Exception e){
+		log("failed");
+	}
+	return access_token;
+}
+
+private static Response renewToken(){
+	HashMap<String, String> formParams = new HashMap<~>();
+	formParams.put("client_id", ConfigLoader.getInstance().getPropertyValue("client_id"));
+	
+	Response response = RestResources.postToken(formParams);
+	
+	if(response.statusCode() != 200){
+		LoggerUtil.getLogger().error("Failed..with status code{}", response.statusCode());
+	}
+	return response;
+}
+
+===========================================================================
+
+for allure we can specify directory of results instead of default on project level
+by creating a properties file under resources and adding this line in the file
+allure.results.directory=target/allure-results
+
